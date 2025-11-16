@@ -1,0 +1,542 @@
+{
+	"info": {
+		"_postman_id": "lego-minifigures-api-001",
+		"name": "Lego Minifigures REST API",
+		"description": "Postman collection for testing Lego Minifigures REST API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "POST - User Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.sessid) {",
+									"        pm.collectionVariables.set(\"session_token\", jsonData.sessid);",
+									"        pm.collectionVariables.set(\"session_name\", jsonData.session_name);",
+									"    }",
+									"    if (jsonData.user) {",
+									"        pm.collectionVariables.set(\"user_id\", jsonData.user.uid);",
+									"        pm.collectionVariables.set(\"user_name\", jsonData.user.name);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/user/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"login"
+							]
+						},
+						"description": "Login a user and get session token. Session cookies are automatically saved by Postman. Response includes sessid, session_name, and user object."
+					},
+					"response": []
+				},
+				{
+					"name": "POST - User Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-CSRF-Token",
+								"value": "{{session_token}}",
+								"type": "text",
+								"description": "CSRF token from login response"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/user/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"logout"
+							]
+						},
+						"description": "Logout the current user session. Requires authentication (use login first)."
+					},
+					"response": []
+				},
+				{
+					"name": "POST - User Register",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"newuser\",\n  \"mail\": \"newuser@example.com\",\n  \"pass\": \"securepassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/user/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"register"
+							]
+						},
+						"description": "Register a new user account. Required fields: name (username), mail (email), pass (password). Returns the created user object."
+					},
+					"response": []
+				},
+				{
+					"name": "GET - Get CSRF Token",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/user/token",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"token"
+							]
+						},
+						"description": "Get CSRF token for authenticated requests. Returns token string."
+					},
+					"response": []
+				},
+				{
+					"name": "GET - Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-CSRF-Token",
+								"value": "{{session_token}}",
+								"type": "text",
+								"description": "CSRF token from login"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/user/{{user_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"user",
+								"{{user_id}}"
+							]
+						},
+						"description": "Get current logged-in user details. Requires authentication (use login first)."
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints for user login, logout, and registration"
+		},
+		{
+			"name": "GET - List All Minifigures",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/lego_minifigures?offset=0&limit=25",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lego_minifigures"
+					],
+					"query": [
+						{
+							"key": "offset",
+							"value": "0",
+							"description": "Zero-based offset (optional, default: 0)"
+						},
+						{
+							"key": "limit",
+							"value": "25",
+							"description": "Maximum number of records (optional, default: 25)"
+						}
+					]
+				},
+				"description": "Retrieves a paginated list of all Lego minifigures. Returns data array with count, offset, and limit."
+			},
+			"response": []
+		},
+		{
+			"name": "GET - Get Single Minifigure",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/lego_minifigures/{{minifigure_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lego_minifigures",
+						"{{minifigure_id}}"
+					]
+				},
+				"description": "Retrieves a single minifigure by its node ID (nid). Replace {{minifigure_id}} with actual node ID."
+			},
+			"response": []
+		},
+		{
+			"name": "POST - Create New Minifigure",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Classic Space Astronaut\",\n  \"field_name\": \"Space Explorer\",\n  \"field_description\": \"A classic blue space astronaut minifigure from the 1980s\",\n  \"field_image\": {\n    \"fid\": 1\n  }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/lego_minifigures",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lego_minifigures"
+					]
+				},
+				"description": "Creates a new minifigure node. Required field: title. Optional: field_name, field_description, field_image (file ID)."
+			},
+			"response": []
+		},
+		{
+			"name": "POST - Create Minifigure (Minimal)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Knight with Sword\",\n  \"field_name\": \"Medieval Knight\",\n  \"field_description\": \"A brave knight ready for battle\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/lego_minifigures",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lego_minifigures"
+					]
+				},
+				"description": "Creates a new minifigure with only required title field and optional text fields. No image."
+			},
+			"response": []
+		},
+		{
+			"name": "PUT - Update Minifigure",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Updated Space Explorer\",\n  \"field_name\": \"Space Commander\",\n  \"field_description\": \"Updated description for the space explorer minifigure\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/lego_minifigures/{{minifigure_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lego_minifigures",
+						"{{minifigure_id}}"
+					]
+				},
+				"description": "Updates an existing minifigure. All fields are optional - only include fields you want to update. Replace {{minifigure_id}} with actual node ID."
+			},
+			"response": []
+		},
+		{
+			"name": "PUT - Update Minifigure (Partial)",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"field_description\": \"Only updating the description field\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/lego_minifigures/{{minifigure_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lego_minifigures",
+						"{{minifigure_id}}"
+					]
+				},
+				"description": "Example of partial update - only updating the description field. Other fields remain unchanged."
+			},
+			"response": []
+		},
+		{
+			"name": "DELETE - Delete Minifigure",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/v1/lego_minifigures/{{minifigure_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"lego_minifigures",
+						"{{minifigure_id}}"
+					]
+				},
+				"description": "Deletes a minifigure by its node ID. Replace {{minifigure_id}} with actual node ID. Returns confirmation with status, id, and title."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost/drupal",
+			"type": "string",
+			"description": "Base URL of your Drupal installation. Change this to match your setup (e.g., http://localhost:8888/drupal for MAMP)"
+		},
+		{
+			"key": "minifigure_id",
+			"value": "1",
+			"type": "string",
+			"description": "Node ID (nid) of a minifigure. Update this after creating a minifigure to test update/delete operations."
+		},
+		{
+			"key": "username",
+			"value": "admin",
+			"type": "string",
+			"description": "Username for login. Update this with your Drupal username."
+		},
+		{
+			"key": "password",
+			"value": "",
+			"type": "string",
+			"description": "Password for login. Update this with your Drupal password."
+		},
+		{
+			"key": "session_token",
+			"value": "",
+			"type": "string",
+			"description": "CSRF session token. Automatically set after login."
+		},
+		{
+			"key": "session_name",
+			"value": "",
+			"type": "string",
+			"description": "Session name. Automatically set after login."
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string",
+			"description": "Current user ID. Automatically set after login."
+		},
+		{
+			"key": "user_name",
+			"value": "",
+			"type": "string",
+			"description": "Current username. Automatically set after login."
+		}
+	]
+}
+

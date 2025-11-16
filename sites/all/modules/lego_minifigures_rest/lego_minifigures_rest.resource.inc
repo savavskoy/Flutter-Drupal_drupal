@@ -3,6 +3,7 @@
 /**
  * @file
  * Callback implementations for the Lego minifigure REST resource.
+ * Uses Drupal Node API instead of variable storage.
  */
 
 /**
@@ -58,7 +59,7 @@ function _lego_minifigures_rest_definition() {
             array(
               'name' => 'id',
               'type' => 'int',
-              'description' => 'Identifier of the minifigure to retrieve.',
+              'description' => 'Identifier (nid) of the minifigure to retrieve.',
               'optional' => FALSE,
               'source' => array('path' => 0),
             ),
@@ -92,7 +93,7 @@ function _lego_minifigures_rest_definition() {
             array(
               'name' => 'id',
               'type' => 'int',
-              'description' => 'Identifier of the minifigure to update.',
+              'description' => 'Identifier (nid) of the minifigure to update.',
               'optional' => FALSE,
               'source' => array('path' => 0),
             ),
@@ -116,7 +117,7 @@ function _lego_minifigures_rest_definition() {
             array(
               'name' => 'id',
               'type' => 'int',
-              'description' => 'Identifier of the minifigure to delete.',
+              'description' => 'Identifier (nid) of the minifigure to delete.',
               'optional' => FALSE,
               'source' => array('path' => 0),
             ),
@@ -128,7 +129,7 @@ function _lego_minifigures_rest_definition() {
 }
 
 /**
- * Returns a paginated list of stored minifigures.
+ * Returns a paginated list of minifigure nodes.
  *
  * @param int $offset
  *   Optional offset from the beginning of the result set.
@@ -139,117 +140,201 @@ function _lego_minifigures_rest_definition() {
  *   A structured response containing the requested data.
  */
 function _lego_minifigures_rest_index($offset = 0, $limit = 25) {
-  $items = _lego_minifigures_rest_load_items();
-  uasort($items, '_lego_minifigures_rest_sort_items');
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+    ->entityCondition('bundle', 'minifigure')
+    ->propertyCondition('status', NODE_PUBLISHED)
+    ->propertyOrderBy('title', 'ASC')
+    ->range($offset, $limit);
 
-  $offset = max(0, (int) $offset);
-  $limit = (int) $limit;
-  if ($limit <= 0) {
-    $limit = count($items);
+  $result = $query->execute();
+
+  if (empty($result['node'])) {
+    return array(
+      'data' => array(),
+      'count' => 0,
+      'offset' => $offset,
+      'limit' => $limit,
+    );
   }
 
-  $paged_items = array_slice(array_values($items), $offset, $limit);
+  $nids = array_keys($result['node']);
+  $nodes = node_load_multiple($nids);
+  $items = array();
+
+  foreach ($nodes as $node) {
+    $items[] = _lego_minifigures_rest_node_to_array($node);
+  }
+
+  // Get total count for pagination.
+  $count_query = new EntityFieldQuery();
+  $count_query->entityCondition('entity_type', 'node')
+    ->entityCondition('bundle', 'minifigure')
+    ->propertyCondition('status', NODE_PUBLISHED);
+  $count_result = $count_query->execute();
+  $total_count = isset($count_result['node']) ? count($count_result['node']) : 0;
 
   return array(
-    'data' => $paged_items,
-    'count' => count($items),
+    'data' => $items,
+    'count' => $total_count,
     'offset' => $offset,
     'limit' => $limit,
   );
 }
 
 /**
- * Retrieves a single minifigure by its identifier.
+ * Retrieves a single minifigure node by its nid.
  *
  * @param int $id
- *   The numeric identifier of the requested item.
+ *   The node ID (nid) of the requested item.
  *
  * @return array
- *   The stored item.
+ *   The minifigure data as an array.
  *
  * @throws \Exception
  *   Thrown when the requested item cannot be found.
  */
 function _lego_minifigures_rest_retrieve($id) {
-  $items = _lego_minifigures_rest_load_items();
-  $id = (int) $id;
+  $node = node_load($id);
 
-  if (!isset($items[$id])) {
+  if (!$node || $node->type !== 'minifigure') {
     _lego_minifigures_rest_throw(t('Minifigure @id was not found.', array('@id' => $id)), 404);
   }
 
-  return $items[$id];
+  return _lego_minifigures_rest_node_to_array($node);
 }
 
 /**
- * Persists a new minifigure based on POSTed data.
+ * Creates a new minifigure node based on POSTed data.
  *
  * @param array $data
  *   The decoded payload sent by the client.
  *
  * @return array
- *   The newly created item.
+ *   The newly created minifigure data.
  *
  * @throws \Exception
  *   Thrown when validation fails.
  */
 function _lego_minifigures_rest_create($data = array()) {
   $payload = _lego_minifigures_rest_extract_payload($data);
-  $items = _lego_minifigures_rest_load_items();
 
-  $item = _lego_minifigures_rest_prepare_item($payload);
-  $id = _lego_minifigures_rest_generate_id($items);
-  $timestamp = REQUEST_TIME;
+  // Create new node object.
+  $node = new stdClass();
+  $node->type = 'minifigure';
+  $node->language = LANGUAGE_NONE;
+  $node->uid = isset($GLOBALS['user']->uid) ? $GLOBALS['user']->uid : 0;
+  $node->status = NODE_PUBLISHED;
+  $node->promote = 0;
+  $node->comment = 0;
 
-  $item['id'] = $id;
-  $item['created'] = $timestamp;
-  $item['updated'] = $timestamp;
+  // Set title (required).
+  if (empty($payload['title'])) {
+    _lego_minifigures_rest_throw(t('The "title" field is required.'), 400);
+  }
+  $node->title = trim($payload['title']);
 
-  $items[$id] = $item;
-  _lego_minifigures_rest_save_items($items);
+  // Set field_name.
+  if (isset($payload['field_name'])) {
+    $node->field_name[LANGUAGE_NONE][0]['value'] = trim($payload['field_name']);
+  }
 
-  return $items[$id];
+  // Set field_description.
+  if (isset($payload['field_description'])) {
+    $node->field_description[LANGUAGE_NONE][0]['value'] = trim($payload['field_description']);
+  }
+
+  // Set field_image (expects file ID or file object).
+  if (isset($payload['field_image'])) {
+    $node->field_image[LANGUAGE_NONE][0] = _lego_minifigures_rest_prepare_image_field($payload['field_image']);
+  }
+
+  // Validate and save the node.
+  node_object_prepare($node);
+  $node = node_submit($node);
+
+  if ($errors = node_validate($node)) {
+    $error_messages = array();
+    foreach ($errors as $field => $field_errors) {
+      foreach ($field_errors as $error) {
+        $error_messages[] = $error['message'];
+      }
+    }
+    _lego_minifigures_rest_throw(implode(' ', $error_messages), 400);
+  }
+
+  node_save($node);
+
+  return _lego_minifigures_rest_node_to_array($node);
 }
 
 /**
- * Updates an existing minifigure.
+ * Updates an existing minifigure node.
  *
  * @param int $id
- *   The identifier of the minifigure to update.
+ *   The node ID (nid) of the minifigure to update.
  * @param array $data
  *   The decoded payload sent by the client.
  *
  * @return array
- *   The updated minifigure.
+ *   The updated minifigure data.
  *
  * @throws \Exception
  *   Thrown when validation fails or the minifigure cannot be found.
  */
 function _lego_minifigures_rest_update($id, $data = array()) {
-  $items = _lego_minifigures_rest_load_items();
-  $id = (int) $id;
+  $node = node_load($id);
 
-  if (!isset($items[$id])) {
+  if (!$node || $node->type !== 'minifigure') {
     _lego_minifigures_rest_throw(t('Minifigure @id was not found.', array('@id' => $id)), 404);
   }
 
   $payload = _lego_minifigures_rest_extract_payload($data);
-  $updated_item = _lego_minifigures_rest_prepare_item($payload, $items[$id], TRUE);
-  $updated_item['id'] = $id;
-  $updated_item['created'] = $items[$id]['created'];
-  $updated_item['updated'] = REQUEST_TIME;
 
-  $items[$id] = $updated_item;
-  _lego_minifigures_rest_save_items($items);
+  // Update title if provided.
+  if (isset($payload['title'])) {
+    $node->title = trim($payload['title']);
+  }
 
-  return $items[$id];
+  // Update field_name if provided.
+  if (isset($payload['field_name'])) {
+    $node->field_name[LANGUAGE_NONE][0]['value'] = trim($payload['field_name']);
+  }
+
+  // Update field_description if provided.
+  if (isset($payload['field_description'])) {
+    $node->field_description[LANGUAGE_NONE][0]['value'] = trim($payload['field_description']);
+  }
+
+  // Update field_image if provided.
+  if (isset($payload['field_image'])) {
+    $node->field_image[LANGUAGE_NONE][0] = _lego_minifigures_rest_prepare_image_field($payload['field_image']);
+  }
+
+  // Validate and save the node.
+  node_object_prepare($node);
+  $node = node_submit($node);
+
+  if ($errors = node_validate($node)) {
+    $error_messages = array();
+    foreach ($errors as $field => $field_errors) {
+      foreach ($field_errors as $error) {
+        $error_messages[] = $error['message'];
+      }
+    }
+    _lego_minifigures_rest_throw(implode(' ', $error_messages), 400);
+  }
+
+  node_save($node);
+
+  return _lego_minifigures_rest_node_to_array($node);
 }
 
 /**
- * Deletes a minifigure by its identifier.
+ * Deletes a minifigure node by its nid.
  *
  * @param int $id
- *   The identifier of the minifigure to delete.
+ *   The node ID (nid) of the minifigure to delete.
  *
  * @return array
  *   A confirmation payload.
@@ -258,60 +343,111 @@ function _lego_minifigures_rest_update($id, $data = array()) {
  *   Thrown when the minifigure cannot be found.
  */
 function _lego_minifigures_rest_delete($id) {
-  $items = _lego_minifigures_rest_load_items();
-  $id = (int) $id;
+  $node = node_load($id);
 
-  if (!isset($items[$id])) {
+  if (!$node || $node->type !== 'minifigure') {
     _lego_minifigures_rest_throw(t('Minifigure @id was not found.', array('@id' => $id)), 404);
   }
 
-  $deleted = $items[$id];
-  unset($items[$id]);
-  _lego_minifigures_rest_save_items($items);
+  $title = $node->title;
+  node_delete($id);
 
   return array(
     'status' => 'deleted',
-    'id' => $deleted['id'],
-    'name' => $deleted['name'],
+    'id' => $id,
+    'title' => $title,
   );
 }
 
 /**
- * Loads all stored items from Drupal variable storage.
+ * Converts a node object to an array for API response.
+ *
+ * @param object $node
+ *   The node object.
  *
  * @return array
- *   The stored items indexed by their ID.
+ *   The minifigure data as an array.
  */
-function _lego_minifigures_rest_load_items() {
-  $items = variable_get('lego_minifigures_rest_items', array());
-  return is_array($items) ? $items : array();
-}
+function _lego_minifigures_rest_node_to_array($node) {
+  $data = array(
+    'id' => $node->nid,
+    'title' => $node->title,
+    'created' => $node->created,
+    'updated' => $node->changed,
+  );
 
-/**
- * Saves the full collection of items to Drupal variable storage.
- *
- * @param array $items
- *   The items to persist.
- */
-function _lego_minifigures_rest_save_items(array $items) {
-  variable_set('lego_minifigures_rest_items', $items);
-}
-
-/**
- * Generates a new integer identifier based on existing items.
- *
- * @param array $items
- *   The existing items.
- *
- * @return int
- *   A unique identifier.
- */
-function _lego_minifigures_rest_generate_id(array $items) {
-  if (empty($items)) {
-    return 1;
+  // Extract field_name.
+  if (isset($node->field_name[LANGUAGE_NONE][0]['value'])) {
+    $data['field_name'] = $node->field_name[LANGUAGE_NONE][0]['value'];
   }
 
-  return max(array_keys($items)) + 1;
+  // Extract field_description.
+  if (isset($node->field_description[LANGUAGE_NONE][0]['value'])) {
+    $data['field_description'] = $node->field_description[LANGUAGE_NONE][0]['value'];
+  }
+
+  // Extract field_image.
+  if (isset($node->field_image[LANGUAGE_NONE][0])) {
+    $file = $node->field_image[LANGUAGE_NONE][0];
+    $data['field_image'] = array(
+      'fid' => $file['fid'],
+      'filename' => $file['filename'],
+      'uri' => $file['uri'],
+      'url' => file_create_url($file['uri']),
+    );
+  }
+
+  return $data;
+}
+
+/**
+ * Prepares image field data for node save.
+ *
+ * @param mixed $image_data
+ *   Can be a file ID (int), file object, or array with file info.
+ *
+ * @return array
+ *   Formatted image field array.
+ */
+function _lego_minifigures_rest_prepare_image_field($image_data) {
+  // If it's already a file array, return it.
+  if (is_array($image_data) && isset($image_data['fid'])) {
+    return $image_data;
+  }
+
+  // If it's a file ID, load the file.
+  if (is_numeric($image_data)) {
+    $file = file_load($image_data);
+    if (!$file) {
+      _lego_minifigures_rest_throw(t('File with ID @fid was not found.', array('@fid' => $image_data)), 400);
+    }
+    return array(
+      'fid' => $file->fid,
+      'uid' => $file->uid,
+      'filename' => $file->filename,
+      'uri' => $file->uri,
+      'filemime' => $file->filemime,
+      'filesize' => $file->filesize,
+      'status' => $file->status,
+      'timestamp' => $file->timestamp,
+    );
+  }
+
+  // If it's a file object.
+  if (is_object($image_data) && isset($image_data->fid)) {
+    return array(
+      'fid' => $image_data->fid,
+      'uid' => $image_data->uid,
+      'filename' => $image_data->filename,
+      'uri' => $image_data->uri,
+      'filemime' => $image_data->filemime,
+      'filesize' => $image_data->filesize,
+      'status' => $image_data->status,
+      'timestamp' => $image_data->timestamp,
+    );
+  }
+
+  _lego_minifigures_rest_throw(t('Invalid image field data provided.'), 400);
 }
 
 /**
@@ -329,165 +465,6 @@ function _lego_minifigures_rest_extract_payload($data = array()) {
   }
 
   return _lego_minifigures_rest_read_request_body();
-}
-
-/**
- * Normalizes and validates incoming data for create/update operations.
- *
- * @param array $payload
- *   The raw payload from the client.
- * @param array $existing
- *   The existing minifigure (only for updates).
- * @param bool $is_update
- *   Whether the normalization is performed for an update.
- *
- * @return array
- *   The normalized minifigure array.
- */
-function _lego_minifigures_rest_prepare_item(array $payload, array $existing = array(), $is_update = FALSE) {
-  $base = array(
-    'name' => '',
-    'theme' => '',
-    'release_year' => NULL,
-    'condition' => '',
-    'notes' => '',
-    'accessories' => array(),
-    'owned' => TRUE,
-  );
-
-  $item = $existing + $base;
-
-  // Name.
-  if (array_key_exists('name', $payload)) {
-    $name = trim($payload['name']);
-    if ($name === '') {
-      _lego_minifigures_rest_throw(t('The "name" field is required.'), 400);
-    }
-    if (drupal_strlen($name) > 255) {
-      _lego_minifigures_rest_throw(t('The "name" field must not exceed @length characters.', array('@length' => 255)), 400);
-    }
-    $item['name'] = $name;
-  }
-  elseif (!$is_update || $item['name'] === '') {
-    _lego_minifigures_rest_throw(t('The "name" field is required.'), 400);
-  }
-
-  // Theme.
-  if (array_key_exists('theme', $payload)) {
-    $theme = trim($payload['theme']);
-    if (drupal_strlen($theme) > 255) {
-      _lego_minifigures_rest_throw(t('The "theme" field must not exceed @length characters.', array('@length' => 255)), 400);
-    }
-    $item['theme'] = $theme;
-  }
-
-  // Release year.
-  if (array_key_exists('release_year', $payload)) {
-    if ($payload['release_year'] === '' || $payload['release_year'] === NULL) {
-      $item['release_year'] = NULL;
-    }
-    elseif (!is_numeric($payload['release_year'])) {
-      _lego_minifigures_rest_throw(t('The "release_year" field must be a number.'), 400);
-    }
-    else {
-      $year = (int) $payload['release_year'];
-      if ($year < 1970 || $year > (int) format_date(REQUEST_TIME, 'custom', 'Y') + 2) {
-        _lego_minifigures_rest_throw(t('The "release_year" field must be between 1970 and the near future.'), 400);
-      }
-      $item['release_year'] = $year;
-    }
-  }
-
-  // Condition.
-  if (array_key_exists('condition', $payload)) {
-    $condition = trim($payload['condition']);
-    if (drupal_strlen($condition) > 255) {
-      _lego_minifigures_rest_throw(t('The "condition" field must not exceed @length characters.', array('@length' => 255)), 400);
-    }
-    $item['condition'] = $condition;
-  }
-
-  // Notes.
-  if (array_key_exists('notes', $payload)) {
-    $notes = trim($payload['notes']);
-    $item['notes'] = $notes;
-  }
-
-  // Accessories.
-  if (array_key_exists('accessories', $payload)) {
-    $item['accessories'] = _lego_minifigures_rest_normalize_accessories($payload['accessories']);
-  }
-
-  // Owned flag.
-  if (array_key_exists('owned', $payload)) {
-    $owned = _lego_minifigures_rest_normalize_boolean($payload['owned']);
-    if ($owned === NULL) {
-      _lego_minifigures_rest_throw(t('The "owned" field must be boolean.'), 400);
-    }
-    $item['owned'] = $owned;
-  }
-
-  return $item;
-}
-
-/**
- * Normalizes accessories to a string array.
- *
- * @param mixed $accessories
- *   The incoming accessories value.
- *
- * @return array
- *   A list of accessory strings.
- */
-function _lego_minifigures_rest_normalize_accessories($accessories) {
-  if ($accessories === NULL || $accessories === '') {
-    return array();
-  }
-
-  if (!is_array($accessories)) {
-    _lego_minifigures_rest_throw(t('The "accessories" field must be an array.'), 400);
-  }
-
-  $normalized = array();
-  foreach ($accessories as $accessory) {
-    $value = trim((string) $accessory);
-    if ($value !== '') {
-      $normalized[] = $value;
-    }
-  }
-
-  return array_values($normalized);
-}
-
-/**
- * Converts a value to boolean if possible.
- *
- * @param mixed $value
- *   The value to normalize.
- *
- * @return bool|null
- *   TRUE or FALSE on success, NULL on failure.
- */
-function _lego_minifigures_rest_normalize_boolean($value) {
-  if (is_bool($value)) {
-    return $value;
-  }
-
-  if (is_string($value)) {
-    $value = drupal_strtolower($value);
-    if (in_array($value, array('1', 'true', 'yes'), TRUE)) {
-      return TRUE;
-    }
-    if (in_array($value, array('0', 'false', 'no'), TRUE)) {
-      return FALSE;
-    }
-  }
-
-  if (is_numeric($value)) {
-    return ((int) $value) === 1;
-  }
-
-  return NULL;
 }
 
 /**
@@ -514,21 +491,6 @@ function _lego_minifigures_rest_read_request_body() {
 }
 
 /**
- * Sort callback to order minifigures by name.
- *
- * @param array $a
- *   First item.
- * @param array $b
- *   Second item.
- *
- * @return int
- *   Comparison result.
- */
-function _lego_minifigures_rest_sort_items(array $a, array $b) {
-  return strcasecmp($a['name'], $b['name']);
-}
-
-/**
  * Determines whether the current user can perform an operation.
  *
  * @param string $op
@@ -549,9 +511,25 @@ function _lego_minifigures_rest_access($op, array $args = array(), $account = NU
 
   switch ($op) {
     case 'create':
+      return user_access('create minifigure content', $account);
+
     case 'update':
+      if (!empty($args[0])) {
+        $node = node_load($args[0]);
+        if ($node && $node->type === 'minifigure') {
+          return node_access('update', $node, $account);
+        }
+      }
+      return user_access('edit any minifigure content', $account);
+
     case 'delete':
-      return user_access('access content', $account);
+      if (!empty($args[0])) {
+        $node = node_load($args[0]);
+        if ($node && $node->type === 'minifigure') {
+          return node_access('delete', $node, $account);
+        }
+      }
+      return user_access('delete any minifigure content', $account);
 
     case 'index':
     case 'retrieve':
@@ -577,4 +555,3 @@ function _lego_minifigures_rest_throw($message, $code = 400) {
 
   throw new Exception($message, $code);
 }
-
