@@ -51,8 +51,9 @@
 - Returns: Created user object
 
 ### Get CSRF Token
-- **GET** `{{base_url}}/api/v1/user/token`
+- **GET** `{{base_url}}/services/session/token`
 - Returns: CSRF token string for authenticated requests
+- **Note:** This is a Services module endpoint (not part of user resource), so it doesn't use `/api/v1` prefix
 
 ### Get Current User
 - **GET** `{{base_url}}/api/v1/user/{{user_id}}`

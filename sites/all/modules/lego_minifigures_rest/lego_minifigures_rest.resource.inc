@@ -249,17 +249,22 @@ function _lego_minifigures_rest_create($data = array()) {
     $node->field_image[LANGUAGE_NONE][0] = _lego_minifigures_rest_prepare_image_field($payload['field_image']);
   }
 
-  // Validate and save the node.
+  // Prepare the node.
   node_object_prepare($node);
   $node = node_submit($node);
 
-  if ($errors = node_validate($node)) {
+  // Validate fields (field_attach_validate will set errors if any).
+  field_attach_validate('node', $node);
+  
+  // Check for form errors (field_attach_validate uses form_set_error).
+  $errors = form_get_errors();
+  if ($errors) {
     $error_messages = array();
-    foreach ($errors as $field => $field_errors) {
-      foreach ($field_errors as $error) {
-        $error_messages[] = $error['message'];
-      }
+    foreach ($errors as $field => $message) {
+      $error_messages[] = $message;
     }
+    // Clear form errors to avoid issues.
+    form_clear_errors();
     _lego_minifigures_rest_throw(implode(' ', $error_messages), 400);
   }
 
@@ -311,17 +316,22 @@ function _lego_minifigures_rest_update($id, $data = array()) {
     $node->field_image[LANGUAGE_NONE][0] = _lego_minifigures_rest_prepare_image_field($payload['field_image']);
   }
 
-  // Validate and save the node.
+  // Prepare the node.
   node_object_prepare($node);
   $node = node_submit($node);
 
-  if ($errors = node_validate($node)) {
+  // Validate fields (field_attach_validate will set errors if any).
+  field_attach_validate('node', $node);
+  
+  // Check for form errors (field_attach_validate uses form_set_error).
+  $errors = form_get_errors();
+  if ($errors) {
     $error_messages = array();
-    foreach ($errors as $field => $field_errors) {
-      foreach ($field_errors as $error) {
-        $error_messages[] = $error['message'];
-      }
+    foreach ($errors as $field => $message) {
+      $error_messages[] = $message;
     }
+    // Clear form errors to avoid issues.
+    form_clear_errors();
     _lego_minifigures_rest_throw(implode(' ', $error_messages), 400);
   }
 
