@@ -270,6 +270,12 @@ function _lego_minifigures_rest_create($data = array()) {
 
   node_save($node);
 
+  // Reload node to get all field data properly loaded.
+  $node = node_load($node->nid);
+
+  // Create/update URL alias based on field_name.
+  _lego_minifigures_rest_update_path_alias($node);
+
   return _lego_minifigures_rest_node_to_array($node);
 }
 
@@ -337,6 +343,12 @@ function _lego_minifigures_rest_update($id, $data = array()) {
 
   node_save($node);
 
+  // Reload node to get all field data properly loaded.
+  $node = node_load($node->nid);
+
+  // Create/update URL alias based on field_name.
+  _lego_minifigures_rest_update_path_alias($node);
+
   return _lego_minifigures_rest_node_to_array($node);
 }
 
@@ -391,6 +403,10 @@ function _lego_minifigures_rest_node_to_array($node) {
     $data['field_name'] = $node->field_name[LANGUAGE_NONE][0]['value'];
   }
 
+  // Generate URL based on field_name or fallback to ID.
+  $url_path = _lego_minifigures_rest_get_url_path($node);
+  $data['url'] = url($url_path, array('absolute' => TRUE));
+
   // Extract field_description.
   if (isset($node->field_description[LANGUAGE_NONE][0]['value'])) {
     $data['field_description'] = $node->field_description[LANGUAGE_NONE][0]['value'];
@@ -408,6 +424,125 @@ function _lego_minifigures_rest_node_to_array($node) {
   }
 
   return $data;
+}
+
+/**
+ * Generates a URL-friendly slug from field_name.
+ *
+ * @param string $name
+ *   The field_name value.
+ *
+ * @return string
+ *   URL-friendly slug (e.g., "Batman Black from Avrora" -> "Batman-Black-from-Avrora").
+ */
+function _lego_minifigures_rest_generate_slug($name) {
+  if (empty($name)) {
+    return '';
+  }
+
+  // Convert to lowercase.
+  $slug = drupal_strtolower($name);
+
+  // Replace spaces and multiple spaces with single dash.
+  $slug = preg_replace('/\s+/', '-', $slug);
+
+  // Remove special characters, keep only alphanumeric, dash, and underscore.
+  $slug = preg_replace('/[^a-z0-9\-_]/', '', $slug);
+
+  // Remove multiple consecutive dashes.
+  $slug = preg_replace('/-+/', '-', $slug);
+
+  // Trim dashes from start and end.
+  $slug = trim($slug, '-');
+
+  return $slug;
+}
+
+/**
+ * Gets the URL path for a minifigure node.
+ *
+ * @param object $node
+ *   The node object.
+ *
+ * @return string
+ *   URL path (alias if exists, otherwise based on field_name or node ID).
+ */
+function _lego_minifigures_rest_get_url_path($node) {
+  // First, try to get existing path alias.
+  $source = 'node/' . $node->nid;
+  $alias = drupal_get_path_alias($source);
+  
+  // If alias exists and is not the default node path, use it.
+  if ($alias && $alias != $source) {
+    return $alias;
+  }
+
+  // If no alias exists, generate from field_name.
+  if (isset($node->field_name[LANGUAGE_NONE][0]['value']) && !empty($node->field_name[LANGUAGE_NONE][0]['value'])) {
+    $slug = _lego_minifigures_rest_generate_slug($node->field_name[LANGUAGE_NONE][0]['value']);
+    if (!empty($slug)) {
+      return $slug;
+    }
+  }
+
+  // Fallback to node ID.
+  return 'node/' . $node->nid;
+}
+
+/**
+ * Creates or updates the path alias for a minifigure node.
+ *
+ * @param object $node
+ *   The node object.
+ */
+function _lego_minifigures_rest_update_path_alias($node) {
+  // Only create alias if field_name exists.
+  if (!isset($node->field_name[LANGUAGE_NONE][0]['value']) || empty($node->field_name[LANGUAGE_NONE][0]['value'])) {
+    return;
+  }
+
+  $slug = _lego_minifigures_rest_generate_slug($node->field_name[LANGUAGE_NONE][0]['value']);
+  if (empty($slug)) {
+    return;
+  }
+
+  $source = 'node/' . $node->nid;
+  $alias = $slug;
+
+  // Check if alias already exists for this source.
+  $existing = db_query("SELECT pid, alias FROM {url_alias} WHERE source = :source", array(':source' => $source))->fetchObject();
+  
+  if ($existing) {
+    // Update existing alias if it's different.
+    if ($existing->alias != $alias) {
+      // Check if new alias is already taken by another node.
+      $conflict = db_query("SELECT source FROM {url_alias} WHERE alias = :alias AND source != :source", array(
+        ':alias' => $alias,
+        ':source' => $source,
+      ))->fetchField();
+      
+      if (!$conflict) {
+        db_update('url_alias')
+          ->fields(array('alias' => $alias))
+          ->condition('pid', $existing->pid)
+          ->execute();
+      }
+    }
+  }
+  else {
+    // Check if alias is already taken.
+    $conflict = db_query("SELECT source FROM {url_alias} WHERE alias = :alias", array(':alias' => $alias))->fetchField();
+    
+    if (!$conflict) {
+      // Create new alias.
+      $path = array(
+        'source' => $source,
+        'alias' => $alias,
+        'language' => LANGUAGE_NONE,
+      );
+      path_save($path);
+    }
+  }
 }
 
 /**
