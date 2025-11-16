@@ -60,6 +60,78 @@
 - Requires: Authentication
 - Returns: Current logged-in user details
 
+## File Upload Endpoints
+
+### Method 1: Upload Image File (Base64) - **RECOMMENDED**
+
+- **POST** `{{base_url}}/api/v1/file`
+- Method: `application/json` with base64 encoded image
+- Requires: Authentication (CSRF token)
+- Returns: File object with `fid` (file ID)
+- **Automatically saves `fid` to `uploaded_file_id` variable**
+
+**How to use:**
+1. **Important:** Make sure `file` resource is enabled in your Services endpoint (Structure → Services → your endpoint → enable `file` resource)
+2. Login first to get session token
+3. Convert your image to base64:
+   - **Online:** Use https://base64.guru/converter/encode/image
+   - **Command line:** `base64 -i image.jpg` (Mac/Linux) or `certutil -encode image.jpg base64.txt` (Windows)
+   - **Node.js:** `node -e "console.log(require('fs').readFileSync('image.jpg').toString('base64'))"`
+4. Go to "File Upload" → "POST - Upload Image File (Base64)"
+5. Update `base64_image_data` variable with your base64 string, OR
+6. Replace `{{base64_image_data}}` in the body with your base64 string directly
+7. Update `filename` in the body to match your file (e.g., "minifigure.jpg")
+8. Send request
+9. Copy the `fid` from response (or use `{{uploaded_file_id}}` variable which is automatically saved)
+
+**Example Request Body:**
+```json
+{
+  "file": {
+    "file": "iVBORw0KGgoAAAANSUhEUgAA...",
+    "filename": "batman.jpg",
+    "filepath": "public://minifigures/"
+  }
+}
+```
+
+**Example Response:**
+```json
+{
+  "fid": 5,
+  "uri": "api/v1/file/5"
+}
+```
+
+### Method 2: Upload Image File (Multipart) - Alternative
+
+- **POST** `{{base_url}}/api/v1/file/create_raw`
+- Method: `multipart/form-data`
+- Body: Form-data with key `files` and select your image file
+- **Note:** May not work with all REST server configurations. If you get "Unsupported request content type" error, use Base64 method instead.
+
+**How to use:**
+1. Login first to get session token
+2. Go to "File Upload" → "POST - Upload Image File (Multipart - Alternative)"
+3. In Body tab, select "form-data"
+4. The key `files` is already set - click "Select Files" and choose your image
+5. Send request
+6. If you get error, use Base64 method instead
+
+### Using Uploaded File in Minifigure
+
+After uploading, use the `fid` in `field_image` when creating/updating minifigures:
+```json
+{
+  "title": "Batman Black from Avrora",
+  "field_name": "Batman Black from Avrora",
+  "field_description": "Classic Batman minifigure",
+  "field_image": {
+    "fid": 5
+  }
+}
+```
+
 ## API Endpoints
 
 ### Base URL Structure
@@ -96,17 +168,19 @@
 
 ## Request Body Examples
 
-### Create Minifigure (Full)
+### Create Minifigure (Full - with Image)
 ```json
 {
   "title": "Classic Space Astronaut",
   "field_name": "Space Explorer",
   "field_description": "A classic blue space astronaut minifigure from the 1980s",
   "field_image": {
-    "fid": 1
+    "fid": 5
   }
 }
 ```
+
+**Note:** First upload the image using "POST - Upload Image File" to get the `fid`, then use it in `field_image`.
 
 ### Create Minifigure (Minimal - Required Only)
 ```json

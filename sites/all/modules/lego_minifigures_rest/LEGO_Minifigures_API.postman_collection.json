@@ -213,12 +213,135 @@
             "description": "Get current logged-in user details. Requires authentication (use login first)."
           },
           "response": []
-        }
-      ],
-      "description": "Authentication endpoints for user login, logout, and registration"
-    },
-    {
-      "name": "GET - List All Minifigures",
+				}
+			],
+			"description": "Authentication endpoints for user login, logout, and registration"
+		},
+		{
+			"name": "File Upload",
+			"item": [
+				{
+					"name": "POST - Upload Image File (Base64)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.fid) {",
+									"        pm.collectionVariables.set(\"uploaded_file_id\", jsonData.fid);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// This script converts file to base64",
+									"// Note: You need to manually convert your image to base64",
+									"// Use online tool or: node -e \"console.log(require('fs').readFileSync('image.jpg').toString('base64'))\""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-CSRF-Token",
+								"value": "{{session_token}}",
+								"type": "text",
+								"description": "CSRF token from login (required for authenticated requests)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file\": {\n    \"file\": \"{{base64_image_data}}\",\n    \"filename\": \"minifigure.jpg\",\n    \"filepath\": \"public://minifigures/\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/file",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"file"
+							]
+						},
+						"description": "Upload an image file using base64 encoding. Replace {{base64_image_data}} with base64 encoded image string. Returns file ID (fid). This method works reliably with REST server."
+					},
+					"response": []
+				},
+				{
+					"name": "POST - Upload Image File (Multipart - Alternative)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-CSRF-Token",
+								"value": "{{session_token}}",
+								"type": "text",
+								"description": "CSRF token from login (required for authenticated requests)"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "files",
+									"type": "file",
+									"src": [],
+									"description": "Select an image file to upload (jpg, png, gif, etc.)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/file/create_raw",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"file",
+								"create_raw"
+							]
+						},
+						"description": "Upload using multipart/form-data. May not work with all REST server configurations. If you get 'Unsupported request content type' error, use the Base64 method instead."
+					},
+					"response": []
+				}
+			],
+			"description": "File upload endpoints for images. Use Base64 method for reliable uploads."
+		},
+		{
+			"name": "GET - List All Minifigures",
       "request": {
         "method": "GET",
         "header": [
@@ -314,9 +437,9 @@
             "description": "CSRF token from login (required for authenticated requests)"
           }
         ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"title\": \"Classic Space Astronaut\",\n  \"field_name\": \"Space Explorer\",\n  \"field_description\": \"A classic blue space astronaut minifigure from the 1980s\",\n  \"field_image\": {\n    \"fid\": 1\n  }\n}",
+					"body": {
+						"mode": "raw",
+						"raw": "{\n  \"title\": \"Classic Space Astronaut\",\n  \"field_name\": \"Space Explorer\",\n  \"field_description\": \"A classic blue space astronaut minifigure from the 1980s\",\n  \"field_image\": {\n    \"fid\": {{uploaded_file_id}}\n  }\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -560,12 +683,24 @@
       "type": "string",
       "description": "Current user ID. Automatically set after login."
     },
-    {
-      "key": "user_name",
-      "value": "",
-      "type": "string",
-      "description": "Current username. Automatically set after login."
-    }
-  ]
+		{
+			"key": "user_name",
+			"value": "",
+			"type": "string",
+			"description": "Current username. Automatically set after login."
+		},
+		{
+			"key": "uploaded_file_id",
+			"value": "",
+			"type": "string",
+			"description": "File ID (fid) of uploaded image. Automatically set after file upload."
+		},
+		{
+			"key": "base64_image_data",
+			"value": "",
+			"type": "string",
+			"description": "Base64 encoded image data. Use online converter or command line to convert your image to base64."
+		}
+	]
 }
 
