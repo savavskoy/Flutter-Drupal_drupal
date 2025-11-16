@@ -1,0 +1,12 @@
+<?php
+
+/**
+ * Implements hook_services_resources().
+ *
+ * This hook declares the REST resources exposed by this module.
+ * In Drupal 7 REST endpoints are provided with the Services module.
+ */
+function lego_minifigures_rest_services_resources() {
+  module_load_include('inc', 'lego_minifigures_rest', 'lego_minifigures_rest.resource');
+  return _lego_minifigures_rest_definition();
+}

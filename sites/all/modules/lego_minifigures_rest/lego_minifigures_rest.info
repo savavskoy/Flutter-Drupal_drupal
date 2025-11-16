@@ -1,0 +1,6 @@
+name = Lego Minifigures REST
+description = Provides REST endpoints for managing a Lego minifigure collection.
+core = 7.x
+package = Custom
+dependencies[] = services
+
